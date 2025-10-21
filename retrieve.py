@@ -6,7 +6,9 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQA
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 
 # Load environment variables from .env file
 load_dotenv()
@@ -120,10 +122,29 @@ if st.session_state.vector_index is not None:
     retriever = st.session_state.vector_index.as_retriever(
         search_kwargs={"k": 3}  # Return top 3 relevant chunks
     )
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        retriever=retriever,
-        return_source_documents=True
+
+    # Create a RAG prompt template
+    template = """Answer the question based only on the following context:
+
+{context}
+
+Question: {question}
+
+Answer:"""
+
+    prompt = ChatPromptTemplate.from_template(template)
+
+
+    # Create RAG chain using LCEL
+    def format_docs(docs):
+        return "\n\n".join(doc.page_content for doc in docs)
+
+
+    rag_chain = (
+            {"context": retriever | format_docs, "question": RunnablePassthrough()}
+            | prompt
+            | llm
+            | StrOutputParser()
     )
 
     query = st.text_input("Enter your question:", placeholder="What is this article about?")
@@ -131,16 +152,20 @@ if st.session_state.vector_index is not None:
     if query:
         with st.spinner("🔍 Fetching answer..."):
             try:
-                result = qa_chain.invoke({"query": query})
+                # Get answer
+                answer = rag_chain.invoke(query)
+
+                # Get source documents separately
+                source_docs = retriever.get_relevant_documents(query)
 
                 # Display answer
                 st.markdown("### Answer:")
-                st.write(result["result"])
+                st.write(answer)
 
                 # Show sources
-                if "source_documents" in result and result["source_documents"]:
+                if source_docs:
                     with st.expander("📖 View Sources"):
-                        for i, doc in enumerate(result["source_documents"][:3], 1):
+                        for i, doc in enumerate(source_docs[:3], 1):
                             st.markdown(f"**Source {i}:**")
                             st.text(doc.page_content[:300] + "...")
                             if hasattr(doc, 'metadata') and 'source' in doc.metadata:
