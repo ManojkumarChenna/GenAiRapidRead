@@ -10,8 +10,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
-# Load environment variables from .env file
 load_dotenv()
+
+# Set USER_AGENT to avoid warning
+os.environ[
+    'USER_AGENT'] = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                     '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
 st.title("🌐 Web Article Q&A with Groq LLM")
 
@@ -70,11 +74,24 @@ if load_button:
             # Loop through URLs to load and split
             for url in urls:
                 try:
-                    loader = WebBaseLoader([url])
+                    # Configure WebBaseLoader with better headers
+                    loader = WebBaseLoader(
+                        [url],
+                        header_template={
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        },
+                        verify_ssl=True
+                    )
                     data = loader.load()
 
-                    if not data:
-                        failed_urls.append((url, "No content loaded"))
+                    if not data or len(data) == 0:
+                        failed_urls.append((url, "No content loaded from URL"))
+                        continue
+
+                    # Check if the loaded content has text
+                    if not data[0].page_content or len(data[0].page_content.strip()) < 100:
+                        failed_urls.append(
+                            (url, "Insufficient content loaded (might require JavaScript or be blocked)"))
                         continue
 
                     splitter = RecursiveCharacterTextSplitter(
@@ -87,7 +104,8 @@ if load_button:
                     successful_urls.append(url)
 
                 except Exception as e:
-                    failed_urls.append((url, str(e)))
+                    failed_urls.append((url, f"{type(e).__name__}: {str(e)[:200]}"))
+                    st.sidebar.error(f"Debug - Failed to load {url[:50]}: {str(e)[:100]}")
 
             # Create FAISS index if we have documents
             if all_docs:
