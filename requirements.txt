@@ -2,8 +2,8 @@ streamlit
 langchain
 langchain-groq
 langchain-community
-faiss-cpu
 langchain-text-splitters
+faiss-cpu
 sentence-transformers
 python-dotenv
 huggingface-hub
