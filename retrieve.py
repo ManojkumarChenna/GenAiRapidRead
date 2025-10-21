@@ -174,7 +174,7 @@ Answer:"""
                 answer = rag_chain.invoke(query)
 
                 # Get source documents separately
-                source_docs = retriever.get_relevant_documents(query)
+                source_docs = retriever.invoke(query)
 
                 # Display answer
                 st.markdown("### Answer:")
